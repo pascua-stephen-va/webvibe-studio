@@ -1,0 +1,10 @@
+{
+  "name": "WebVibe Studio",
+  "description": "A boutique web design and development agency crafting high-converting digital experiences for ambitious brands worldwide.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
