@@ -238,6 +238,33 @@ test('submitWeb3FormsEnquiry handles success, missing key, non-OK HTTP, API erro
   );
 });
 
+test('validateEnquiryField provides real-time per-field feedback for name, email, and message', async () => {
+  const { validateEnquiryField } = await import('./studioLogic');
+
+  assert.equal(validateEnquiryField('name', ''), 'Please enter your name.');
+  assert.equal(validateEnquiryField('name', 'A'), 'Name must be at least 2 characters.');
+  assert.equal(validateEnquiryField('name', 'Alex'), undefined);
+
+  assert.equal(validateEnquiryField('email', ''), 'Please enter your email address.');
+  assert.equal(validateEnquiryField('email', 'alex@'), 'Please enter a valid email address.');
+  assert.equal(validateEnquiryField('email', 'alex@studio'), 'Please enter a valid email address.');
+  assert.equal(validateEnquiryField('email', 'alex@studio.co'), undefined);
+
+  assert.equal(
+    validateEnquiryField('message', ''),
+    'Tell us briefly what you are looking to build.'
+  );
+  assert.equal(
+    validateEnquiryField('message', 'Too short'),
+    'Please share at least a sentence about your project.'
+  );
+  assert.equal(
+    validateEnquiryField('message', 'Building a bespoke web storefront for Q2.'),
+    undefined
+  );
+});
+
+
 
 
 

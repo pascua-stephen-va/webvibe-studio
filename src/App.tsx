@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { MotionConfig } from 'motion/react';
 import { AboutSection } from './components/AboutSection';
 import { CaseStudiesSection } from './components/CaseStudiesSection';
 import { ContactSection } from './components/ContactSection';
@@ -7,6 +8,7 @@ import { Footer } from './components/Footer';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { ProcessSection } from './components/ProcessSection';
+import { SectionReveal } from './components/SectionReveal';
 import { ServicesSection } from './components/ServicesSection';
 import type { CaseStudy } from './data/studioContent';
 import { getNextTheme, resolveInitialTheme, type ThemeMode } from './utils/studioLogic';
@@ -62,29 +64,41 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--bg)] text-[var(--ink)]">
-      <Header theme={theme} onToggleTheme={handleToggleTheme} />
+    <MotionConfig reducedMotion="user">
+      <div className="min-h-screen bg-[var(--bg)] text-[var(--ink)]">
+        <Header theme={theme} onToggleTheme={handleToggleTheme} />
 
-      <main>
-        <Hero theme={theme} />
-        <AboutSection onOpenStudioModal={() => setStudioModalOpen(true)} />
-        <CaseStudiesSection onSelectCaseStudy={(study) => setActiveCaseStudy(study)} />
-        <ServicesSection onSelectService={(service) => setSelectedService(service)} />
-        <ProcessSection />
-        <ContactSection preselectedService={selectedService} />
-      </main>
+        <main>
+          <Hero theme={theme} />
+          <SectionReveal>
+            <AboutSection onOpenStudioModal={() => setStudioModalOpen(true)} />
+          </SectionReveal>
+          <SectionReveal>
+            <CaseStudiesSection onSelectCaseStudy={(study) => setActiveCaseStudy(study)} />
+          </SectionReveal>
+          <SectionReveal>
+            <ServicesSection onSelectService={(service) => setSelectedService(service)} />
+          </SectionReveal>
+          <SectionReveal>
+            <ProcessSection />
+          </SectionReveal>
+          <SectionReveal>
+            <ContactSection preselectedService={selectedService} />
+          </SectionReveal>
+        </main>
 
-      <Footer />
+        <Footer />
 
-      <DetailModal
-        caseStudy={activeCaseStudy}
-        studioOpen={studioModalOpen}
-        onClose={() => {
-          setActiveCaseStudy(null);
-          setStudioModalOpen(false);
-        }}
-        onStartSimilarProject={handleStartSimilarProject}
-      />
-    </div>
+        <DetailModal
+          caseStudy={activeCaseStudy}
+          studioOpen={studioModalOpen}
+          onClose={() => {
+            setActiveCaseStudy(null);
+            setStudioModalOpen(false);
+          }}
+          onStartSimilarProject={handleStartSimilarProject}
+        />
+      </div>
+    </MotionConfig>
   );
 }

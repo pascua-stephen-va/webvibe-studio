@@ -1,13 +1,24 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { ArrowUpRight, Calendar, Check, Copy, Mail } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowUpRight,
+  Calendar,
+  Check,
+  CheckCircle2,
+  Copy,
+  Mail,
+} from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import { STUDIO_BOOKING_URL, STUDIO_EMAIL } from '../data/studioContent';
 import {
   buildEnquiryMailtoUrl,
   buildEnquiryPlainText,
   submitWeb3FormsEnquiry,
+  validateEnquiryField,
   validateEnquiryForm,
   type EnquiryFormData,
   type EnquiryFormErrors,
+  type ValidatableEnquiryField,
 } from '../utils/studioLogic';
 import { RollButton } from './RollButton';
 import { SectionEyebrow } from './SectionEyebrow';
@@ -51,10 +62,53 @@ export function ContactSection({ preselectedService }: ContactSectionProps) {
   );
   const [botcheck, setBotcheck] = useState(false);
   const [errors, setErrors] = useState<EnquiryFormErrors>({});
+  const [touched, setTouched] = useState<Record<ValidatableEnquiryField, boolean>>({
+    name: false,
+    email: false,
+    message: false,
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<SubmissionResult | null>(null);
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [copiedDraft, setCopiedDraft] = useState(false);
+
+  const resetTouched = () =>
+    setTouched({
+      name: false,
+      email: false,
+      message: false,
+    });
+
+  const handleFieldChange = (field: ValidatableEnquiryField, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    const shouldValidateLive = touched[field] || value.trim().length > 0;
+    if (shouldValidateLive) {
+      if (!touched[field] && value.trim().length > 0) {
+        setTouched((prev) => ({ ...prev, [field]: true }));
+      }
+      const fieldError = validateEnquiryField(field, value);
+      setErrors((prev) => ({ ...prev, [field]: fieldError }));
+    }
+  };
+
+  const handleFieldBlur = (field: ValidatableEnquiryField) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+    const fieldError = validateEnquiryField(field, formData[field]);
+    setErrors((prev) => ({ ...prev, [field]: fieldError }));
+  };
+
+  const isFieldValid = (field: ValidatableEnquiryField): boolean =>
+    formData[field].trim().length > 0 && validateEnquiryField(field, formData[field]) === undefined;
+
+  const getFieldBorderClass = (field: ValidatableEnquiryField): string => {
+    if (errors[field]) {
+      return 'border-rose-500/80 dark:border-rose-400/80 focus:border-rose-500 dark:focus:border-rose-400';
+    }
+    if (isFieldValid(field)) {
+      return 'border-emerald-500/60 dark:border-emerald-400/50 focus:border-[var(--accent)]';
+    }
+    return 'border-[var(--border)] focus:border-[var(--accent)]';
+  };
 
   useEffect(() => {
     if (preselectedService) {
@@ -97,6 +151,7 @@ export function ContactSection({ preselectedService }: ContactSectionProps) {
     event.preventDefault();
     if (isSubmitting) return;
 
+    setTouched({ name: true, email: true, message: true });
     const validation = validateEnquiryForm(formData);
     if (!validation.isValid) {
       setErrors(validation.errors);
@@ -120,6 +175,7 @@ export function ContactSection({ preselectedService }: ContactSectionProps) {
     if (result.ok) {
       setFormData(createEmptyForm(preselectedService));
       setBotcheck(false);
+      resetTouched();
       setSubmissionResult({
         mode: 'web3forms',
         enquiry: snapshot,
@@ -135,6 +191,7 @@ export function ContactSection({ preselectedService }: ContactSectionProps) {
     setErrors({});
     setCopiedDraft(false);
     setBotcheck(false);
+    resetTouched();
     setFormData(createEmptyForm(preselectedService));
   };
 
@@ -233,215 +290,283 @@ export function ContactSection({ preselectedService }: ContactSectionProps) {
           {/* Right column: Validated interactive project enquiry form */}
           <div className="lg:col-span-7">
             <div className="rounded-[26px] border border-[var(--border)] bg-[var(--surface)] p-6 sm:p-9">
-              {submissionResult ? (
-                <div
-                  role="status"
-                  aria-live="polite"
-                  data-testid="enquiry-confirmation"
-                  data-delivery-mode={submissionResult.mode}
-                  className="py-4"
-                >
-                  <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)]">
+              <AnimatePresence mode="wait">
+                {submissionResult ? (
+                  <motion.div
+                    key="enquiry-confirmation"
+                    role="status"
+                    aria-live="polite"
+                    data-testid="enquiry-confirmation"
+                    data-delivery-mode={submissionResult.mode}
+                    initial={{ opacity: 0, y: 16, scale: 0.985 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -8, scale: 0.99 }}
+                    transition={{ duration: 0.36, ease: [0.16, 1, 0.3, 1] }}
+                    className="py-4"
+                  >
+                    <motion.span
+                      initial={{ scale: 0.72, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ type: 'spring', stiffness: 360, damping: 24, delay: 0.06 }}
+                      className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)]"
+                    >
+                      {submissionResult.mode === 'web3forms' ? (
+                        <Check className="h-6 w-6" aria-hidden="true" />
+                      ) : (
+                        <Mail className="h-6 w-6" aria-hidden="true" />
+                      )}
+                    </motion.span>
+
                     {submissionResult.mode === 'web3forms' ? (
-                      <Check className="h-6 w-6" aria-hidden="true" />
-                    ) : (
-                      <Mail className="h-6 w-6" aria-hidden="true" />
-                    )}
-                  </span>
-
-                  {submissionResult.mode === 'web3forms' ? (
-                    <>
-                      <h3 className="mt-5 text-[1.6rem] font-bold text-[var(--ink)]">
-                        Inquiry sent, {submissionResult.enquiry.name}.
-                      </h3>
-                      <p className="mt-2 max-w-[52ch] text-[0.9625rem] leading-[1.65] text-[var(--muted)]">
-                        Thank you for reaching out. Your project brief for{' '}
-                        <strong className="text-[var(--ink)]">
-                          {submissionResult.enquiry.service}
-                        </strong>{' '}
-                        has been delivered to{' '}
-                        <strong className="text-[var(--ink)]">{STUDIO_EMAIL}</strong>, and we will
-                        reply to{' '}
-                        <strong className="text-[var(--ink)]">
-                          {submissionResult.enquiry.email}
-                        </strong>{' '}
-                        within one business day.
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <h3 className="mt-5 text-[1.6rem] font-bold text-[var(--ink)]">
-                        Your inquiry draft is ready, {submissionResult.enquiry.name}.
-                      </h3>
-                      <p className="mt-2 max-w-[52ch] text-[0.9625rem] leading-[1.65] text-[var(--muted)]">
-                        {submissionResult.fallbackFromError ? (
-                          <>
-                            Direct submission couldn&apos;t complete right now, so we prepared a
-                            pre-filled email draft to{' '}
-                            <strong className="text-[var(--ink)]">{STUDIO_EMAIL}</strong> instead.
-                            Hit <strong className="text-[var(--ink)]">Send</strong> in your email
-                            app—or copy the message below if it didn&apos;t open automatically.
-                          </>
-                        ) : (
-                          <>
-                            Your email app should open with a pre-filled draft to{' '}
-                            <strong className="text-[var(--ink)]">{STUDIO_EMAIL}</strong>. Hit{' '}
-                            <strong className="text-[var(--ink)]">Send</strong> there to deliver
-                            your brief—or use the buttons below if your email app didn&apos;t open.
-                          </>
-                        )}
-                      </p>
-                    </>
-                  )}
-
-                  <dl className="mt-6 grid grid-cols-1 gap-4 rounded-[18px] border border-[var(--border)] bg-[var(--bg)] p-5 sm:grid-cols-3 text-[0.875rem]">
-                    <div>
-                      <dt className="text-[var(--muted)]">Service</dt>
-                      <dd className="mt-1 font-semibold text-[var(--ink)]">
-                        {submissionResult.enquiry.service}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-[var(--muted)]">Estimated Budget</dt>
-                      <dd className="mt-1 font-semibold text-[var(--ink)] tabular-nums">
-                        {submissionResult.enquiry.budget}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-[var(--muted)]">Location</dt>
-                      <dd className="mt-1 font-semibold text-[var(--ink)]">
-                        {submissionResult.enquiry.location.trim() || 'Remote / Worldwide'}
-                      </dd>
-                    </div>
-                  </dl>
-
-                  <div className="mt-7 flex flex-wrap items-center gap-3">
-                    {submissionResult.mode === 'web3forms' ? (
-                      <RollButton
-                        label="Send another inquiry"
-                        variant="surface"
-                        size="md"
-                        onClick={handleReset}
-                      />
+                      <>
+                        <h3 className="mt-5 text-[1.6rem] font-bold text-[var(--ink)]">
+                          Inquiry sent, {submissionResult.enquiry.name}.
+                        </h3>
+                        <p className="mt-2 max-w-[52ch] text-[0.9625rem] leading-[1.65] text-[var(--muted)]">
+                          Thank you for reaching out. Your project brief for{' '}
+                          <strong className="text-[var(--ink)]">
+                            {submissionResult.enquiry.service}
+                          </strong>{' '}
+                          has been delivered to{' '}
+                          <strong className="text-[var(--ink)]">{STUDIO_EMAIL}</strong>, and we will
+                          reply to{' '}
+                          <strong className="text-[var(--ink)]">
+                            {submissionResult.enquiry.email}
+                          </strong>{' '}
+                          within one business day.
+                        </p>
+                      </>
                     ) : (
                       <>
-                        <RollButton
-                          label="Open in email app"
-                          href={submittedMailtoUrl}
-                          variant="primary"
-                          size="md"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleCopyDraft(submissionResult.enquiry)}
-                          className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg)] px-5 text-[0.875rem] font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] cursor-pointer whitespace-nowrap"
-                        >
-                          {copiedDraft ? (
+                        <h3 className="mt-5 text-[1.6rem] font-bold text-[var(--ink)]">
+                          Your inquiry draft is ready, {submissionResult.enquiry.name}.
+                        </h3>
+                        <p className="mt-2 max-w-[52ch] text-[0.9625rem] leading-[1.65] text-[var(--muted)]">
+                          {submissionResult.fallbackFromError ? (
                             <>
-                              <Check
-                                className="h-4 w-4 text-emerald-600 dark:text-emerald-400"
-                                aria-hidden="true"
-                              />
-                              <span>Message copied</span>
+                              Direct submission couldn&apos;t complete right now, so we prepared a
+                              pre-filled email draft to{' '}
+                              <strong className="text-[var(--ink)]">{STUDIO_EMAIL}</strong> instead.
+                              Hit <strong className="text-[var(--ink)]">Send</strong> in your email
+                              app—or copy the message below if it didn&apos;t open automatically.
                             </>
                           ) : (
                             <>
-                              <Copy className="h-4 w-4" aria-hidden="true" />
-                              <span>Copy message</span>
+                              Your email app should open with a pre-filled draft to{' '}
+                              <strong className="text-[var(--ink)]">{STUDIO_EMAIL}</strong>. Hit{' '}
+                              <strong className="text-[var(--ink)]">Send</strong> there to deliver
+                              your brief—or use the buttons below if your email app didn&apos;t open.
                             </>
                           )}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleReset}
-                          className="inline-flex h-11 items-center px-3 text-[0.875rem] font-semibold text-[var(--muted)] transition-colors hover:text-[var(--ink)] cursor-pointer whitespace-nowrap"
-                        >
-                          Start over
-                        </button>
+                        </p>
                       </>
                     )}
-                  </div>
-                </div>
-              ) : (
-                <form onSubmit={handleSubmit} noValidate className="space-y-5">
-                  {/* Hidden honeypot field for Web3Forms spam protection */}
-                  <input
-                    type="checkbox"
-                    name="botcheck"
-                    checked={botcheck}
-                    onChange={(e) => setBotcheck(e.target.checked)}
-                    className="hidden"
-                    tabIndex={-1}
-                    autoComplete="off"
-                    aria-hidden="true"
-                  />
-                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                    <div>
-                      <label
-                        htmlFor="enquiry-name"
-                        className="block text-[0.8125rem] font-semibold text-[var(--ink)]"
-                      >
-                        Your name *
-                      </label>
-                      <input
-                        id="enquiry-name"
-                        name="name"
-                        type="text"
-                        autoComplete="name"
-                        value={formData.name}
-                        onChange={(e) => {
-                          setFormData((prev) => ({ ...prev, name: e.target.value }));
-                          if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
-                        }}
-                        placeholder="Alex Morgan"
-                        aria-invalid={Boolean(errors.name)}
-                        aria-describedby={errors.name ? 'enquiry-name-error' : undefined}
-                        className="mt-1.5 w-full rounded-[12px] border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-[0.9375rem] text-[var(--ink)] placeholder:text-[var(--muted)]/70 transition-colors focus:border-[var(--accent)] focus:outline-none"
-                      />
-                      {errors.name && (
-                        <p
-                          id="enquiry-name-error"
-                          role="alert"
-                          className="mt-1.5 text-[0.8125rem] font-medium text-rose-600 dark:text-rose-400"
-                        >
-                          {errors.name}
-                        </p>
-                      )}
-                    </div>
 
-                    <div>
-                      <label
-                        htmlFor="enquiry-email"
-                        className="block text-[0.8125rem] font-semibold text-[var(--ink)]"
-                      >
-                        Email address *
-                      </label>
-                      <input
-                        id="enquiry-email"
-                        name="email"
-                        type="email"
-                        autoComplete="email"
-                        value={formData.email}
-                        onChange={(e) => {
-                          setFormData((prev) => ({ ...prev, email: e.target.value }));
-                          if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
-                        }}
-                        placeholder="alex@company.com"
-                        aria-invalid={Boolean(errors.email)}
-                        aria-describedby={errors.email ? 'enquiry-email-error' : undefined}
-                        className="mt-1.5 w-full rounded-[12px] border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-[0.9375rem] text-[var(--ink)] placeholder:text-[var(--muted)]/70 transition-colors focus:border-[var(--accent)] focus:outline-none"
-                      />
-                      {errors.email && (
-                        <p
-                          id="enquiry-email-error"
-                          role="alert"
-                          className="mt-1.5 text-[0.8125rem] font-medium text-rose-600 dark:text-rose-400"
-                        >
-                          {errors.email}
-                        </p>
+                    <motion.dl
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.32, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+                      className="mt-6 grid grid-cols-1 gap-4 rounded-[18px] border border-[var(--border)] bg-[var(--bg)] p-5 sm:grid-cols-3 text-[0.875rem]"
+                    >
+                      <div>
+                        <dt className="text-[var(--muted)]">Service</dt>
+                        <dd className="mt-1 font-semibold text-[var(--ink)]">
+                          {submissionResult.enquiry.service}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-[var(--muted)]">Estimated Budget</dt>
+                        <dd className="mt-1 font-semibold text-[var(--ink)] tabular-nums">
+                          {submissionResult.enquiry.budget}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-[var(--muted)]">Location</dt>
+                        <dd className="mt-1 font-semibold text-[var(--ink)]">
+                          {submissionResult.enquiry.location.trim() || 'Remote / Worldwide'}
+                        </dd>
+                      </div>
+                    </motion.dl>
+
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
+                      className="mt-7 flex flex-wrap items-center gap-3"
+                    >
+                      {submissionResult.mode === 'web3forms' ? (
+                        <RollButton
+                          label="Send another inquiry"
+                          variant="surface"
+                          size="md"
+                          onClick={handleReset}
+                        />
+                      ) : (
+                        <>
+                          <RollButton
+                            label="Open in email app"
+                            href={submittedMailtoUrl}
+                            variant="primary"
+                            size="md"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleCopyDraft(submissionResult.enquiry)}
+                            className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg)] px-5 text-[0.875rem] font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] cursor-pointer whitespace-nowrap"
+                          >
+                            {copiedDraft ? (
+                              <>
+                                <Check
+                                  className="h-4 w-4 text-emerald-600 dark:text-emerald-400"
+                                  aria-hidden="true"
+                                />
+                                <span>Message copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="h-4 w-4" aria-hidden="true" />
+                                <span>Copy message</span>
+                              </>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleReset}
+                            className="inline-flex h-11 items-center px-3 text-[0.875rem] font-semibold text-[var(--muted)] transition-colors hover:text-[var(--ink)] cursor-pointer whitespace-nowrap"
+                          >
+                            Start over
+                          </button>
+                        </>
                       )}
+                    </motion.div>
+                  </motion.div>
+                ) : (
+                  <motion.form
+                    key="enquiry-form"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.22 }}
+                    onSubmit={handleSubmit}
+                    noValidate
+                    className="space-y-5"
+                  >
+                    {/* Hidden honeypot field for Web3Forms spam protection */}
+                    <input
+                      type="checkbox"
+                      name="botcheck"
+                      checked={botcheck}
+                      onChange={(e) => setBotcheck(e.target.checked)}
+                      className="hidden"
+                      tabIndex={-1}
+                      autoComplete="off"
+                      aria-hidden="true"
+                    />
+                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                      <div>
+                        <label
+                          htmlFor="enquiry-name"
+                          className="block text-[0.8125rem] font-semibold text-[var(--ink)]"
+                        >
+                          Your name *
+                        </label>
+                        <div className="relative mt-1.5">
+                          <input
+                            id="enquiry-name"
+                            name="name"
+                            type="text"
+                            autoComplete="name"
+                            value={formData.name}
+                            onChange={(e) => handleFieldChange('name', e.target.value)}
+                            onBlur={() => handleFieldBlur('name')}
+                            placeholder="Alex Morgan"
+                            aria-invalid={Boolean(errors.name)}
+                            aria-describedby={errors.name ? 'enquiry-name-error' : undefined}
+                            className={`w-full rounded-[12px] border bg-[var(--bg)] pl-4 pr-10 py-3 text-[0.9375rem] text-[var(--ink)] placeholder:text-[var(--muted)]/70 transition-colors focus:outline-none ${getFieldBorderClass('name')}`}
+                          />
+                          {errors.name ? (
+                            <AlertCircle
+                              aria-hidden="true"
+                              className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-rose-500 dark:text-rose-400"
+                            />
+                          ) : isFieldValid('name') ? (
+                            <CheckCircle2
+                              aria-hidden="true"
+                              data-testid="enquiry-name-valid"
+                              className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-600 dark:text-emerald-400"
+                            />
+                          ) : null}
+                        </div>
+                        <AnimatePresence initial={false}>
+                          {errors.name && (
+                            <motion.p
+                              key="name-error"
+                              id="enquiry-name-error"
+                              role="alert"
+                              initial={{ opacity: 0, y: -4 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -4 }}
+                              transition={{ duration: 0.16 }}
+                              className="mt-1.5 text-[0.8125rem] font-medium text-rose-600 dark:text-rose-400"
+                            >
+                              {errors.name}
+                            </motion.p>
+                          )}
+                        </AnimatePresence>
+                      </div>
+
+                      <div>
+                        <label
+                          htmlFor="enquiry-email"
+                          className="block text-[0.8125rem] font-semibold text-[var(--ink)]"
+                        >
+                          Email address *
+                        </label>
+                        <div className="relative mt-1.5">
+                          <input
+                            id="enquiry-email"
+                            name="email"
+                            type="email"
+                            autoComplete="email"
+                            value={formData.email}
+                            onChange={(e) => handleFieldChange('email', e.target.value)}
+                            onBlur={() => handleFieldBlur('email')}
+                            placeholder="alex@company.com"
+                            aria-invalid={Boolean(errors.email)}
+                            aria-describedby={errors.email ? 'enquiry-email-error' : undefined}
+                            className={`w-full rounded-[12px] border bg-[var(--bg)] pl-4 pr-10 py-3 text-[0.9375rem] text-[var(--ink)] placeholder:text-[var(--muted)]/70 transition-colors focus:outline-none ${getFieldBorderClass('email')}`}
+                          />
+                          {errors.email ? (
+                            <AlertCircle
+                              aria-hidden="true"
+                              className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-rose-500 dark:text-rose-400"
+                            />
+                          ) : isFieldValid('email') ? (
+                            <CheckCircle2
+                              aria-hidden="true"
+                              data-testid="enquiry-email-valid"
+                              className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-600 dark:text-emerald-400"
+                            />
+                          ) : null}
+                        </div>
+                        <AnimatePresence initial={false}>
+                          {errors.email && (
+                            <motion.p
+                              key="email-error"
+                              id="enquiry-email-error"
+                              role="alert"
+                              initial={{ opacity: 0, y: -4 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -4 }}
+                              transition={{ duration: 0.16 }}
+                              className="mt-1.5 text-[0.8125rem] font-medium text-rose-600 dark:text-rose-400"
+                            >
+                              {errors.email}
+                            </motion.p>
+                          )}
+                        </AnimatePresence>
+                      </div>
                     </div>
-                  </div>
 
                   <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                     <div>
@@ -522,53 +647,73 @@ export function ContactSection({ preselectedService }: ContactSectionProps) {
                     </div>
                   </div>
 
-                  <div>
-                    <label
-                      htmlFor="enquiry-message"
-                      className="block text-[0.8125rem] font-semibold text-[var(--ink)]"
-                    >
-                      Project brief *
-                    </label>
-                    <textarea
-                      id="enquiry-message"
-                      name="message"
-                      rows={4}
-                      value={formData.message}
-                      onChange={(e) => {
-                        setFormData((prev) => ({ ...prev, message: e.target.value }));
-                        if (errors.message)
-                          setErrors((prev) => ({ ...prev, message: undefined }));
-                      }}
-                      placeholder="Share your goals, current website (if any), and target launch window..."
-                      aria-invalid={Boolean(errors.message)}
-                      aria-describedby={errors.message ? 'enquiry-message-error' : undefined}
-                      className="mt-1.5 w-full resize-y rounded-[12px] border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-[0.9375rem] text-[var(--ink)] placeholder:text-[var(--muted)]/70 transition-colors focus:border-[var(--accent)] focus:outline-none"
-                    />
-                    {errors.message && (
-                      <p
-                        id="enquiry-message-error"
-                        role="alert"
-                        className="mt-1.5 text-[0.8125rem] font-medium text-rose-600 dark:text-rose-400"
-                      >
-                        {errors.message}
-                      </p>
-                    )}
-                  </div>
+                    <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <label
+                          htmlFor="enquiry-message"
+                          className="block text-[0.8125rem] font-semibold text-[var(--ink)]"
+                        >
+                          Project brief *
+                        </label>
+                        {isFieldValid('message') ? (
+                          <span
+                            data-testid="enquiry-message-valid"
+                            className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-emerald-600 dark:text-emerald-400"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span>Looks good</span>
+                          </span>
+                        ) : formData.message.trim().length > 0 ? (
+                          <span className="text-[0.75rem] font-medium tabular-nums text-[var(--muted)]">
+                            {formData.message.trim().length}/10 min chars
+                          </span>
+                        ) : null}
+                      </div>
+                      <textarea
+                        id="enquiry-message"
+                        name="message"
+                        rows={4}
+                        value={formData.message}
+                        onChange={(e) => handleFieldChange('message', e.target.value)}
+                        onBlur={() => handleFieldBlur('message')}
+                        placeholder="Share your goals, current website (if any), and target launch window..."
+                        aria-invalid={Boolean(errors.message)}
+                        aria-describedby={errors.message ? 'enquiry-message-error' : undefined}
+                        className={`mt-1.5 w-full resize-y rounded-[12px] border bg-[var(--bg)] px-4 py-3 text-[0.9375rem] text-[var(--ink)] placeholder:text-[var(--muted)]/70 transition-colors focus:outline-none ${getFieldBorderClass('message')}`}
+                      />
+                      <AnimatePresence initial={false}>
+                        {errors.message && (
+                          <motion.p
+                            key="message-error"
+                            id="enquiry-message-error"
+                            role="alert"
+                            initial={{ opacity: 0, y: -4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -4 }}
+                            transition={{ duration: 0.16 }}
+                            className="mt-1.5 text-[0.8125rem] font-medium text-rose-600 dark:text-rose-400"
+                          >
+                            {errors.message}
+                          </motion.p>
+                        )}
+                      </AnimatePresence>
+                    </div>
 
-                  <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
-                    <p className="text-[0.8125rem] text-[var(--muted)]">
-                      No spam, no automated drip sequences—just a direct reply.
-                    </p>
-                    <RollButton
-                      type="submit"
-                      label={isSubmitting ? 'Sending...' : 'Send project enquiry'}
-                      variant="primary"
-                      size="lg"
-                      disabled={isSubmitting}
-                    />
-                  </div>
-                </form>
-              )}
+                    <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+                      <p className="text-[0.8125rem] text-[var(--muted)]">
+                        No spam, no automated drip sequences—just a direct reply.
+                      </p>
+                      <RollButton
+                        type="submit"
+                        label={isSubmitting ? 'Sending...' : 'Send project enquiry'}
+                        variant="primary"
+                        size="lg"
+                        disabled={isSubmitting}
+                      />
+                    </div>
+                  </motion.form>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </div>

@@ -129,30 +129,49 @@ export function parseReverseGeocodeCity(
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
+export type ValidatableEnquiryField = 'name' | 'email' | 'message';
+
+export function validateEnquiryField(
+  field: ValidatableEnquiryField,
+  value: string
+): string | undefined {
+  const trimmed = value.trim();
+
+  if (field === 'name') {
+    if (!trimmed) return 'Please enter your name.';
+    if (trimmed.length < 2) return 'Name must be at least 2 characters.';
+    return undefined;
+  }
+
+  if (field === 'email') {
+    if (!trimmed) return 'Please enter your email address.';
+    if (!EMAIL_PATTERN.test(trimmed)) return 'Please enter a valid email address.';
+    return undefined;
+  }
+
+  if (field === 'message') {
+    if (!trimmed) return 'Tell us briefly what you are looking to build.';
+    if (trimmed.length < 10) return 'Please share at least a sentence about your project.';
+    return undefined;
+  }
+
+  return undefined;
+}
+
 export function validateEnquiryForm(data: EnquiryFormData): {
   isValid: boolean;
   errors: EnquiryFormErrors;
 } {
   const errors: EnquiryFormErrors = {};
 
-  if (!data.name.trim()) {
-    errors.name = 'Please enter your name.';
-  } else if (data.name.trim().length < 2) {
-    errors.name = 'Name must be at least 2 characters.';
-  }
+  const nameError = validateEnquiryField('name', data.name);
+  if (nameError) errors.name = nameError;
 
-  const normalizedEmail = data.email.trim();
-  if (!normalizedEmail) {
-    errors.email = 'Please enter your email address.';
-  } else if (!EMAIL_PATTERN.test(normalizedEmail)) {
-    errors.email = 'Please enter a valid email address.';
-  }
+  const emailError = validateEnquiryField('email', data.email);
+  if (emailError) errors.email = emailError;
 
-  if (!data.message.trim()) {
-    errors.message = 'Tell us briefly what you are looking to build.';
-  } else if (data.message.trim().length < 10) {
-    errors.message = 'Please share at least a sentence about your project.';
-  }
+  const messageError = validateEnquiryField('message', data.message);
+  if (messageError) errors.message = messageError;
 
   return {
     isValid: Object.keys(errors).length === 0,
