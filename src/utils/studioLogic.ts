@@ -235,4 +235,84 @@ export function buildEnquiryMailtoUrl(
   return `mailto:${recipientEmail.trim()}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
+export const WEB3FORMS_ENDPOINT = 'https://api.web3forms.com/submit';
+
+export interface Web3FormsPayload {
+  access_key: string;
+  subject: string;
+  from_name: string;
+  replyto: string;
+  name: string;
+  email: string;
+  service: string;
+  budget: string;
+  location: string;
+  message: string;
+  botcheck: boolean;
+}
+
+export interface Web3FormsSubmitResult {
+  ok: boolean;
+  reason?: 'missing-key' | 'http-error' | 'api-error' | 'network-error';
+}
+
+export function buildWeb3FormsPayload(
+  accessKey: string,
+  data: EnquiryFormData,
+  botcheck = false
+): Web3FormsPayload {
+  return {
+    access_key: accessKey.trim(),
+    subject: `New WebVibe Studio Inquiry from ${data.name.trim()}`,
+    from_name: 'WebVibe Studio',
+    replyto: data.email.trim(),
+    name: data.name.trim(),
+    email: data.email.trim(),
+    service: data.service.trim(),
+    budget: data.budget.trim(),
+    location: data.location.trim() || 'Remote / Worldwide',
+    message: data.message.trim(),
+    botcheck,
+  };
+}
+
+export async function submitWeb3FormsEnquiry(
+  accessKey: string | undefined,
+  data: EnquiryFormData,
+  botcheck = false,
+  fetchImpl: typeof fetch = fetch
+): Promise<Web3FormsSubmitResult> {
+  const trimmedKey = accessKey?.trim();
+  if (!trimmedKey) {
+    return { ok: false, reason: 'missing-key' };
+  }
+
+  const payload = buildWeb3FormsPayload(trimmedKey, data, botcheck);
+
+  try {
+    const response = await fetchImpl(WEB3FORMS_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      return { ok: false, reason: 'http-error' };
+    }
+
+    const body = (await response.json()) as { success?: boolean } | null;
+    if (body && body.success === true) {
+      return { ok: true };
+    }
+
+    return { ok: false, reason: 'api-error' };
+  } catch {
+    return { ok: false, reason: 'network-error' };
+  }
+}
+
+
 

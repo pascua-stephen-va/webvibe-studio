@@ -10,6 +10,7 @@ interface RollButtonProps {
   size?: 'sm' | 'md' | 'lg';
   className?: string;
   ariaLabel?: string;
+  disabled?: boolean;
 }
 
 export function RollButton({
@@ -21,6 +22,7 @@ export function RollButton({
   size = 'md',
   className = '',
   ariaLabel,
+  disabled = false,
 }: RollButtonProps) {
   const variantClasses = {
     primary:
@@ -52,7 +54,11 @@ export function RollButton({
     lg: 'h-9 w-9',
   }[size];
 
-  const sharedClasses = `group inline-flex items-center justify-center rounded-full font-semibold whitespace-nowrap shrink-0 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-[0.98] cursor-pointer ${variantClasses} ${sizeClasses} ${className}`;
+  const disabledClasses = disabled
+    ? 'opacity-65 cursor-not-allowed pointer-events-none'
+    : 'cursor-pointer active:scale-[0.98]';
+
+  const sharedClasses = `group inline-flex items-center justify-center rounded-full font-semibold whitespace-nowrap shrink-0 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${disabledClasses} ${variantClasses} ${sizeClasses} ${className}`;
 
   const innerContent = (
     <>
@@ -71,7 +77,7 @@ export function RollButton({
         aria-hidden="true"
         className={`inline-flex items-center justify-center rounded-full transition-colors duration-200 ${circleSize} ${circleClasses}`}
       >
-        <ArrowRight className="h-4 w-4 -rotate-45 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:rotate-0" />
+        <ArrowRight className="h-4 w-4 -rotate-45 transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:rotate-0" />
       </span>
     </>
   );
@@ -85,7 +91,13 @@ export function RollButton({
   }
 
   return (
-    <button type={type} onClick={onClick} aria-label={ariaLabel} className={sharedClasses}>
+    <button
+      type={type}
+      onClick={onClick}
+      aria-label={ariaLabel}
+      disabled={disabled}
+      className={sharedClasses}
+    >
       {innerContent}
     </button>
   );

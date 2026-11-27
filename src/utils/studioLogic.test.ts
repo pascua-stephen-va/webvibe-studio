@@ -154,5 +154,90 @@ test('buildEnquiryMailtoUrl encodes subject and body with all enquiry fields', a
   assert.equal(params.get('body'), plainText);
 });
 
+test('buildWeb3FormsPayload formats all fields including replyto and botcheck', async () => {
+  const { buildWeb3FormsPayload } = await import('./studioLogic');
+  const payload = buildWeb3FormsPayload(
+    '  test-uuid-key  ',
+    {
+      name: 'Sam Rivera',
+      email: 'sam@northstar.io',
+      location: 'Austin, CST',
+      service: 'Website Refresh',
+      budget: '$10k – $20k',
+      message: 'Modernizing our marketing site before Series A.',
+    },
+    false
+  );
+
+  assert.equal(payload.access_key, 'test-uuid-key');
+  assert.equal(payload.subject, 'New WebVibe Studio Inquiry from Sam Rivera');
+  assert.equal(payload.from_name, 'WebVibe Studio');
+  assert.equal(payload.replyto, 'sam@northstar.io');
+  assert.equal(payload.service, 'Website Refresh');
+  assert.equal(payload.budget, '$10k – $20k');
+  assert.equal(payload.location, 'Austin, CST');
+  assert.equal(payload.botcheck, false);
+});
+
+test('submitWeb3FormsEnquiry handles success, missing key, non-OK HTTP, API error, and network failure', async () => {
+  const { submitWeb3FormsEnquiry, WEB3FORMS_ENDPOINT } = await import('./studioLogic');
+  const sampleForm = {
+    name: 'Sam Rivera',
+    email: 'sam@northstar.io',
+    location: '',
+    service: 'Website Design & Build',
+    budget: '$5k – $10k',
+    message: 'Building a new studio showcase and enquiry site.',
+  };
+
+  // Missing key
+  const missing = await submitWeb3FormsEnquiry('', sampleForm);
+  assert.deepEqual(missing, { ok: false, reason: 'missing-key' });
+
+  // 200 OK + success: true
+  let capturedUrl = '';
+  let capturedInit: RequestInit | undefined;
+  const okFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    capturedUrl = String(input);
+    capturedInit = init;
+    return new Response(JSON.stringify({ success: true }), { status: 200 });
+  }) as typeof fetch;
+
+  const success = await submitWeb3FormsEnquiry('valid-key', sampleForm, false, okFetch);
+  assert.deepEqual(success, { ok: true });
+  assert.equal(capturedUrl, WEB3FORMS_ENDPOINT);
+  assert.equal(capturedInit?.method, 'POST');
+  const parsedBody = JSON.parse(String(capturedInit?.body));
+  assert.equal(parsedBody.access_key, 'valid-key');
+  assert.equal(parsedBody.replyto, 'sam@northstar.io');
+  assert.equal(parsedBody.from_name, 'WebVibe Studio');
+  assert.equal(parsedBody.botcheck, false);
+
+  // HTTP 500
+  const httpErrFetch = (async () => new Response('Server Error', { status: 500 })) as typeof fetch;
+  assert.deepEqual(
+    await submitWeb3FormsEnquiry('valid-key', sampleForm, false, httpErrFetch),
+    { ok: false, reason: 'http-error' }
+  );
+
+  // 200 OK + success: false
+  const apiErrFetch = (async () =>
+    new Response(JSON.stringify({ success: false }), { status: 200 })) as typeof fetch;
+  assert.deepEqual(
+    await submitWeb3FormsEnquiry('valid-key', sampleForm, false, apiErrFetch),
+    { ok: false, reason: 'api-error' }
+  );
+
+  // Network failure (e.g. ad-blocker or offline)
+  const networkErrFetch = (async () => {
+    throw new TypeError('Failed to fetch');
+  }) as typeof fetch;
+  assert.deepEqual(
+    await submitWeb3FormsEnquiry('valid-key', sampleForm, false, networkErrFetch),
+    { ok: false, reason: 'network-error' }
+  );
+});
+
+
 
 

@@ -4,6 +4,7 @@ import { STUDIO_BOOKING_URL, STUDIO_EMAIL } from '../data/studioContent';
 import {
   buildEnquiryMailtoUrl,
   buildEnquiryPlainText,
+  submitWeb3FormsEnquiry,
   validateEnquiryForm,
   type EnquiryFormData,
   type EnquiryFormErrors,
@@ -29,17 +30,29 @@ const BUDGET_OPTIONS = [
   '$20k+',
 ];
 
+interface SubmissionResult {
+  mode: 'web3forms' | 'mailto-fallback';
+  enquiry: EnquiryFormData;
+  fallbackFromError?: boolean;
+}
+
 export function ContactSection({ preselectedService }: ContactSectionProps) {
-  const [formData, setFormData] = useState<EnquiryFormData>({
+  const createEmptyForm = (service?: string): EnquiryFormData => ({
     name: '',
     email: '',
     location: '',
-    service: preselectedService || SERVICE_OPTIONS[0],
+    service: service || preselectedService || SERVICE_OPTIONS[0],
     budget: BUDGET_OPTIONS[1],
     message: '',
   });
+
+  const [formData, setFormData] = useState<EnquiryFormData>(() =>
+    createEmptyForm(preselectedService)
+  );
+  const [botcheck, setBotcheck] = useState(false);
   const [errors, setErrors] = useState<EnquiryFormErrors>({});
-  const [submittedEnquiry, setSubmittedEnquiry] = useState<EnquiryFormData | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionResult, setSubmissionResult] = useState<SubmissionResult | null>(null);
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [copiedDraft, setCopiedDraft] = useState(false);
 
@@ -70,43 +83,63 @@ export function ContactSection({ preselectedService }: ContactSectionProps) {
     window.setTimeout(() => setCopiedDraft(false), 2400);
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const triggerMailtoFallback = (snapshot: EnquiryFormData, fallbackFromError: boolean) => {
+    const mailtoUrl = buildEnquiryMailtoUrl(STUDIO_EMAIL, snapshot);
+    setSubmissionResult({
+      mode: 'mailto-fallback',
+      enquiry: snapshot,
+      fallbackFromError,
+    });
+    window.location.href = mailtoUrl;
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isSubmitting) return;
+
     const validation = validateEnquiryForm(formData);
     if (!validation.isValid) {
       setErrors(validation.errors);
       return;
     }
+
     const snapshot: EnquiryFormData = { ...formData };
     setErrors({});
     setCopiedDraft(false);
-    setSubmittedEnquiry(snapshot);
 
-    const mailtoUrl = buildEnquiryMailtoUrl(STUDIO_EMAIL, snapshot);
-    const link = document.createElement('a');
-    link.href = mailtoUrl;
-    link.style.display = 'none';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const web3FormsKey = (import.meta.env.VITE_WEB3FORMS_KEY ?? '').trim();
+    if (!web3FormsKey) {
+      triggerMailtoFallback(snapshot, false);
+      return;
+    }
+
+    setIsSubmitting(true);
+    const result = await submitWeb3FormsEnquiry(web3FormsKey, snapshot, botcheck);
+    setIsSubmitting(false);
+
+    if (result.ok) {
+      setFormData(createEmptyForm(preselectedService));
+      setBotcheck(false);
+      setSubmissionResult({
+        mode: 'web3forms',
+        enquiry: snapshot,
+      });
+      return;
+    }
+
+    triggerMailtoFallback(snapshot, true);
   };
 
   const handleReset = () => {
-    setSubmittedEnquiry(null);
+    setSubmissionResult(null);
     setErrors({});
     setCopiedDraft(false);
-    setFormData({
-      name: '',
-      email: '',
-      location: '',
-      service: preselectedService || SERVICE_OPTIONS[0],
-      budget: BUDGET_OPTIONS[1],
-      message: '',
-    });
+    setBotcheck(false);
+    setFormData(createEmptyForm(preselectedService));
   };
 
-  const submittedMailtoUrl = submittedEnquiry
-    ? buildEnquiryMailtoUrl(STUDIO_EMAIL, submittedEnquiry)
+  const submittedMailtoUrl = submissionResult
+    ? buildEnquiryMailtoUrl(STUDIO_EMAIL, submissionResult.enquiry)
     : '';
 
   return (
@@ -200,81 +233,148 @@ export function ContactSection({ preselectedService }: ContactSectionProps) {
           {/* Right column: Validated interactive project enquiry form */}
           <div className="lg:col-span-7">
             <div className="rounded-[26px] border border-[var(--border)] bg-[var(--surface)] p-6 sm:p-9">
-              {submittedEnquiry ? (
+              {submissionResult ? (
                 <div
                   role="status"
                   aria-live="polite"
                   data-testid="enquiry-confirmation"
+                  data-delivery-mode={submissionResult.mode}
                   className="py-4"
                 >
                   <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)]">
-                    <Mail className="h-6 w-6" aria-hidden="true" />
+                    {submissionResult.mode === 'web3forms' ? (
+                      <Check className="h-6 w-6" aria-hidden="true" />
+                    ) : (
+                      <Mail className="h-6 w-6" aria-hidden="true" />
+                    )}
                   </span>
-                  <h3 className="mt-5 text-[1.6rem] font-bold text-[var(--ink)]">
-                    Your enquiry draft is ready, {submittedEnquiry.name}.
-                  </h3>
-                  <p className="mt-2 max-w-[52ch] text-[0.9625rem] leading-[1.65] text-[var(--muted)]">
-                    Your email app should open with a pre-filled draft to{' '}
-                    <strong className="text-[var(--ink)]">{STUDIO_EMAIL}</strong>. Hit{' '}
-                    <strong className="text-[var(--ink)]">Send</strong> there to deliver your brief—or use the actions below if it didn&apos;t open automatically.
-                  </p>
+
+                  {submissionResult.mode === 'web3forms' ? (
+                    <>
+                      <h3 className="mt-5 text-[1.6rem] font-bold text-[var(--ink)]">
+                        Inquiry sent, {submissionResult.enquiry.name}.
+                      </h3>
+                      <p className="mt-2 max-w-[52ch] text-[0.9625rem] leading-[1.65] text-[var(--muted)]">
+                        Thank you for reaching out. Your project brief for{' '}
+                        <strong className="text-[var(--ink)]">
+                          {submissionResult.enquiry.service}
+                        </strong>{' '}
+                        has been delivered to{' '}
+                        <strong className="text-[var(--ink)]">{STUDIO_EMAIL}</strong>, and we will
+                        reply to{' '}
+                        <strong className="text-[var(--ink)]">
+                          {submissionResult.enquiry.email}
+                        </strong>{' '}
+                        within one business day.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <h3 className="mt-5 text-[1.6rem] font-bold text-[var(--ink)]">
+                        Your inquiry draft is ready, {submissionResult.enquiry.name}.
+                      </h3>
+                      <p className="mt-2 max-w-[52ch] text-[0.9625rem] leading-[1.65] text-[var(--muted)]">
+                        {submissionResult.fallbackFromError ? (
+                          <>
+                            Direct submission couldn&apos;t complete right now, so we prepared a
+                            pre-filled email draft to{' '}
+                            <strong className="text-[var(--ink)]">{STUDIO_EMAIL}</strong> instead.
+                            Hit <strong className="text-[var(--ink)]">Send</strong> in your email
+                            app—or copy the message below if it didn&apos;t open automatically.
+                          </>
+                        ) : (
+                          <>
+                            Your email app should open with a pre-filled draft to{' '}
+                            <strong className="text-[var(--ink)]">{STUDIO_EMAIL}</strong>. Hit{' '}
+                            <strong className="text-[var(--ink)]">Send</strong> there to deliver
+                            your brief—or use the buttons below if your email app didn&apos;t open.
+                          </>
+                        )}
+                      </p>
+                    </>
+                  )}
 
                   <dl className="mt-6 grid grid-cols-1 gap-4 rounded-[18px] border border-[var(--border)] bg-[var(--bg)] p-5 sm:grid-cols-3 text-[0.875rem]">
                     <div>
                       <dt className="text-[var(--muted)]">Service</dt>
                       <dd className="mt-1 font-semibold text-[var(--ink)]">
-                        {submittedEnquiry.service}
+                        {submissionResult.enquiry.service}
                       </dd>
                     </div>
                     <div>
                       <dt className="text-[var(--muted)]">Estimated Budget</dt>
                       <dd className="mt-1 font-semibold text-[var(--ink)] tabular-nums">
-                        {submittedEnquiry.budget}
+                        {submissionResult.enquiry.budget}
                       </dd>
                     </div>
                     <div>
                       <dt className="text-[var(--muted)]">Location</dt>
                       <dd className="mt-1 font-semibold text-[var(--ink)]">
-                        {submittedEnquiry.location.trim() || 'Remote / Worldwide'}
+                        {submissionResult.enquiry.location.trim() || 'Remote / Worldwide'}
                       </dd>
                     </div>
                   </dl>
 
                   <div className="mt-7 flex flex-wrap items-center gap-3">
-                    <RollButton
-                      label="Open in email app"
-                      href={submittedMailtoUrl}
-                      variant="primary"
-                      size="md"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleCopyDraft(submittedEnquiry)}
-                      className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg)] px-5 text-[0.875rem] font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] cursor-pointer whitespace-nowrap"
-                    >
-                      {copiedDraft ? (
-                        <>
-                          <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-                          <span>Message copied</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="h-4 w-4" aria-hidden="true" />
-                          <span>Copy message</span>
-                        </>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleReset}
-                      className="inline-flex h-11 items-center px-3 text-[0.875rem] font-semibold text-[var(--muted)] transition-colors hover:text-[var(--ink)] cursor-pointer whitespace-nowrap"
-                    >
-                      Start over
-                    </button>
+                    {submissionResult.mode === 'web3forms' ? (
+                      <RollButton
+                        label="Send another inquiry"
+                        variant="surface"
+                        size="md"
+                        onClick={handleReset}
+                      />
+                    ) : (
+                      <>
+                        <RollButton
+                          label="Open in email app"
+                          href={submittedMailtoUrl}
+                          variant="primary"
+                          size="md"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleCopyDraft(submissionResult.enquiry)}
+                          className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg)] px-5 text-[0.875rem] font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] cursor-pointer whitespace-nowrap"
+                        >
+                          {copiedDraft ? (
+                            <>
+                              <Check
+                                className="h-4 w-4 text-emerald-600 dark:text-emerald-400"
+                                aria-hidden="true"
+                              />
+                              <span>Message copied</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="h-4 w-4" aria-hidden="true" />
+                              <span>Copy message</span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleReset}
+                          className="inline-flex h-11 items-center px-3 text-[0.875rem] font-semibold text-[var(--muted)] transition-colors hover:text-[var(--ink)] cursor-pointer whitespace-nowrap"
+                        >
+                          Start over
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} noValidate className="space-y-5">
+                  {/* Hidden honeypot field for Web3Forms spam protection */}
+                  <input
+                    type="checkbox"
+                    name="botcheck"
+                    checked={botcheck}
+                    onChange={(e) => setBotcheck(e.target.checked)}
+                    className="hidden"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    aria-hidden="true"
+                  />
                   <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                     <div>
                       <label
@@ -461,9 +561,10 @@ export function ContactSection({ preselectedService }: ContactSectionProps) {
                     </p>
                     <RollButton
                       type="submit"
-                      label="Send project enquiry"
+                      label={isSubmitting ? 'Sending...' : 'Send project enquiry'}
                       variant="primary"
                       size="lg"
+                      disabled={isSubmitting}
                     />
                   </div>
                 </form>
