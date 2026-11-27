@@ -207,3 +207,32 @@ export function validateCallBooking(input: {
   return { isValid: true };
 }
 
+export function buildEnquiryPlainText(data: EnquiryFormData): string {
+  const location = data.location.trim() || 'Remote / Worldwide';
+  const lines = [
+    'Hi WebVibe Studio,',
+    '',
+    'I would like to start a project enquiry with the details below:',
+    '',
+    `Name: ${data.name.trim()}`,
+    `Email: ${data.email.trim()}`,
+    `Service: ${data.service.trim()}`,
+    `Estimated Budget: ${data.budget.trim()}`,
+    `City / Time Zone: ${location}`,
+    '',
+    'Project Brief:',
+    data.message.trim(),
+  ];
+  return lines.join('\n');
+}
+
+export function buildEnquiryMailtoUrl(
+  recipientEmail: string,
+  data: EnquiryFormData
+): string {
+  const subject = `Project Enquiry: ${data.service.trim()} — ${data.name.trim()}`;
+  const body = buildEnquiryPlainText(data);
+  return `mailto:${recipientEmail.trim()}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+

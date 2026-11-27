@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Calendar, Check, Clock, Copy, Mail } from 'lucide-react';
-import { STUDIO_EMAIL } from '../data/studioContent';
+import { useEffect, useState, type FormEvent } from 'react';
+import { ArrowUpRight, Calendar, Check, Copy, Mail } from 'lucide-react';
+import { STUDIO_BOOKING_URL, STUDIO_EMAIL } from '../data/studioContent';
 import {
-  getUpcomingCallDays,
-  validateCallBooking,
+  buildEnquiryMailtoUrl,
+  buildEnquiryPlainText,
   validateEnquiryForm,
   type EnquiryFormData,
   type EnquiryFormErrors,
@@ -29,8 +29,6 @@ const BUDGET_OPTIONS = [
   '$20k+',
 ];
 
-const CALL_SLOTS = ['9:30 AM', '11:00 AM', '2:00 PM', '4:30 PM'];
-
 export function ContactSection({ preselectedService }: ContactSectionProps) {
   const [formData, setFormData] = useState<EnquiryFormData>({
     name: '',
@@ -43,18 +41,7 @@ export function ContactSection({ preselectedService }: ContactSectionProps) {
   const [errors, setErrors] = useState<EnquiryFormErrors>({});
   const [submittedEnquiry, setSubmittedEnquiry] = useState<EnquiryFormData | null>(null);
   const [copiedEmail, setCopiedEmail] = useState(false);
-
-  const upcomingDays = useMemo(() => getUpcomingCallDays(new Date(), 4), []);
-  const [bookingOpen, setBookingOpen] = useState(false);
-  const [selectedDay, setSelectedDay] = useState(upcomingDays[0]?.id ?? '');
-  const [selectedSlot, setSelectedSlot] = useState(CALL_SLOTS[0]);
-  const [bookingEmail, setBookingEmail] = useState('');
-  const [bookingError, setBookingError] = useState<string | null>(null);
-  const [bookedCall, setBookedCall] = useState<{
-    dayLabel: string;
-    slot: string;
-    email: string;
-  } | null>(null);
+  const [copiedDraft, setCopiedDraft] = useState(false);
 
   useEffect(() => {
     if (preselectedService) {
@@ -72,6 +59,17 @@ export function ContactSection({ preselectedService }: ContactSectionProps) {
     window.setTimeout(() => setCopiedEmail(false), 2400);
   };
 
+  const handleCopyDraft = async (enquiry: EnquiryFormData) => {
+    const plainText = buildEnquiryPlainText(enquiry);
+    try {
+      await navigator.clipboard.writeText(plainText);
+    } catch {
+      // Clipboard API may be unavailable in restricted contexts; still provide clean UI state
+    }
+    setCopiedDraft(true);
+    window.setTimeout(() => setCopiedDraft(false), 2400);
+  };
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const validation = validateEnquiryForm(formData);
@@ -79,13 +77,24 @@ export function ContactSection({ preselectedService }: ContactSectionProps) {
       setErrors(validation.errors);
       return;
     }
+    const snapshot: EnquiryFormData = { ...formData };
     setErrors({});
-    setSubmittedEnquiry({ ...formData });
+    setCopiedDraft(false);
+    setSubmittedEnquiry(snapshot);
+
+    const mailtoUrl = buildEnquiryMailtoUrl(STUDIO_EMAIL, snapshot);
+    const link = document.createElement('a');
+    link.href = mailtoUrl;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleReset = () => {
     setSubmittedEnquiry(null);
     setErrors({});
+    setCopiedDraft(false);
     setFormData({
       name: '',
       email: '',
@@ -96,25 +105,9 @@ export function ContactSection({ preselectedService }: ContactSectionProps) {
     });
   };
 
-  const handleConfirmCall = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const check = validateCallBooking({
-      day: selectedDay,
-      slot: selectedSlot,
-      email: bookingEmail,
-    });
-    if (!check.isValid) {
-      setBookingError(check.error ?? 'Please complete all fields.');
-      return;
-    }
-    const dayObj = upcomingDays.find((d) => d.id === selectedDay);
-    setBookingError(null);
-    setBookedCall({
-      dayLabel: dayObj?.label ?? selectedDay,
-      slot: selectedSlot,
-      email: bookingEmail.trim(),
-    });
-  };
+  const submittedMailtoUrl = submittedEnquiry
+    ? buildEnquiryMailtoUrl(STUDIO_EMAIL, submittedEnquiry)
+    : '';
 
   return (
     <section
@@ -171,158 +164,35 @@ export function ContactSection({ preselectedService }: ContactSectionProps) {
                 </button>
               </div>
 
-              {/* Instant discovery call booking block */}
+              {/* Cal.com discovery call booking block */}
               <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface)] p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-3.5">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-3.5">
                     <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)] shrink-0">
                       <Calendar className="h-[18px] w-[18px]" aria-hidden="true" />
                     </span>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[0.8125rem] font-medium text-[var(--muted)]">
                         Prefer to talk live?
                       </p>
                       <p className="text-[0.95rem] font-semibold text-[var(--ink)]">
-                        Book a free 15-min discovery call right away
+                        Book a free 15-min discovery call
+                      </p>
+                      <p className="mt-0.5 text-[0.8125rem] text-[var(--muted)]">
+                        Instant invite via Cal.com
                       </p>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBookingOpen((prev) => !prev);
-                      setBookingError(null);
-                    }}
-                    aria-expanded={bookingOpen}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[var(--accent)] px-4 text-[0.8125rem] font-semibold text-[var(--accent-ink)] transition-colors hover:bg-[var(--accent-hover)] cursor-pointer whitespace-nowrap shrink-0"
+                  <a
+                    href={STUDIO_BOOKING_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex h-9 w-fit items-center gap-1.5 rounded-full bg-[var(--accent)] px-4 text-[0.8125rem] font-semibold text-[var(--accent-ink)] transition-colors hover:bg-[var(--accent-hover)] whitespace-nowrap shrink-0"
                   >
-                    {bookingOpen ? 'Close' : 'Book a call'}
-                  </button>
+                    <span>Book a call</span>
+                    <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  </a>
                 </div>
-
-                {bookingOpen && (
-                  <div className="mt-5 border-t border-[var(--border)] pt-5">
-                    {bookedCall ? (
-                      <div
-                        role="status"
-                        data-testid="call-booking-confirmation"
-                        className="space-y-3"
-                      >
-                        <div className="flex items-center gap-2 text-[0.875rem] font-semibold text-[var(--ink)]">
-                          <Check className="h-4 w-4 text-[var(--accent)]" aria-hidden="true" />
-                          <span>
-                            Call reserved for {bookedCall.dayLabel} at {bookedCall.slot}
-                          </span>
-                        </div>
-                        <p className="text-[0.8125rem] leading-[1.55] text-[var(--muted)]">
-                          Calendar invite prepared for{' '}
-                          <strong className="text-[var(--ink)]">{bookedCall.email}</strong>.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setBookedCall(null);
-                            setBookingEmail('');
-                          }}
-                          className="text-[0.8125rem] font-semibold text-[var(--accent)] hover:underline cursor-pointer"
-                        >
-                          Change time slot
-                        </button>
-                      </div>
-                    ) : (
-                      <form onSubmit={handleConfirmCall} noValidate className="space-y-4">
-                        <div>
-                          <span className="block text-[0.75rem] font-semibold text-[var(--muted)]">
-                            1. Select a day
-                          </span>
-                          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                            {upcomingDays.map((day) => {
-                              const active = selectedDay === day.id;
-                              return (
-                                <button
-                                  key={day.id}
-                                  type="button"
-                                  onClick={() => setSelectedDay(day.id)}
-                                  aria-pressed={active}
-                                  className={`rounded-[10px] px-2.5 py-2 text-[0.8125rem] font-semibold transition-colors cursor-pointer whitespace-nowrap ${
-                                    active
-                                      ? 'bg-[var(--accent)] text-[var(--accent-ink)]'
-                                      : 'border border-[var(--border)] bg-[var(--bg)] text-[var(--ink)] hover:border-[var(--accent)]'
-                                  }`}
-                                >
-                                  {day.shortLabel}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        <div>
-                          <span className="flex items-center gap-1.5 text-[0.75rem] font-semibold text-[var(--muted)]">
-                            <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                            <span>2. Pick a 15-min slot (your local time)</span>
-                          </span>
-                          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                            {CALL_SLOTS.map((slot) => {
-                              const active = selectedSlot === slot;
-                              return (
-                                <button
-                                  key={slot}
-                                  type="button"
-                                  onClick={() => setSelectedSlot(slot)}
-                                  aria-pressed={active}
-                                  className={`rounded-[10px] px-2.5 py-2 text-[0.8125rem] font-semibold tabular-nums transition-colors cursor-pointer whitespace-nowrap ${
-                                    active
-                                      ? 'bg-[var(--accent)] text-[var(--accent-ink)]'
-                                      : 'border border-[var(--border)] bg-[var(--bg)] text-[var(--ink)] hover:border-[var(--accent)]'
-                                  }`}
-                                >
-                                  {slot}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        <div>
-                          <label
-                            htmlFor="booking-email"
-                            className="block text-[0.75rem] font-semibold text-[var(--muted)]"
-                          >
-                            3. Email for calendar invite
-                          </label>
-                          <div className="mt-1.5 flex gap-2">
-                            <input
-                              id="booking-email"
-                              type="email"
-                              value={bookingEmail}
-                              onChange={(e) => {
-                                setBookingEmail(e.target.value);
-                                if (bookingError) setBookingError(null);
-                              }}
-                              placeholder="you@company.com"
-                              className="min-w-0 flex-1 rounded-[10px] border border-[var(--border)] bg-[var(--bg)] px-3.5 py-2 text-[0.875rem] text-[var(--ink)] placeholder:text-[var(--muted)]/70 focus:border-[var(--accent)] focus:outline-none"
-                            />
-                            <button
-                              type="submit"
-                              className="rounded-[10px] bg-[var(--accent)] px-4 py-2 text-[0.8125rem] font-semibold text-[var(--accent-ink)] transition-colors hover:bg-[var(--accent-hover)] cursor-pointer whitespace-nowrap shrink-0"
-                            >
-                              Confirm
-                            </button>
-                          </div>
-                          {bookingError && (
-                            <p
-                              role="alert"
-                              className="mt-1.5 text-[0.8125rem] font-medium text-rose-600 dark:text-rose-400"
-                            >
-                              {bookingError}
-                            </p>
-                          )}
-                        </div>
-                      </form>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -338,13 +208,15 @@ export function ContactSection({ preselectedService }: ContactSectionProps) {
                   className="py-4"
                 >
                   <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)]">
-                    <Check className="h-6 w-6" aria-hidden="true" />
+                    <Mail className="h-6 w-6" aria-hidden="true" />
                   </span>
                   <h3 className="mt-5 text-[1.6rem] font-bold text-[var(--ink)]">
-                    Enquiry received, {submittedEnquiry.name}.
+                    Your enquiry draft is ready, {submittedEnquiry.name}.
                   </h3>
-                  <p className="mt-2 max-w-[50ch] text-[0.9625rem] leading-[1.65] text-[var(--muted)]">
-                    We have logged your brief for <strong className="text-[var(--ink)]">{submittedEnquiry.service}</strong> and will reply to <strong className="text-[var(--ink)]">{submittedEnquiry.email}</strong> within one business day with next steps.
+                  <p className="mt-2 max-w-[52ch] text-[0.9625rem] leading-[1.65] text-[var(--muted)]">
+                    Your email app should open with a pre-filled draft to{' '}
+                    <strong className="text-[var(--ink)]">{STUDIO_EMAIL}</strong>. Hit{' '}
+                    <strong className="text-[var(--ink)]">Send</strong> there to deliver your brief—or use the actions below if it didn&apos;t open automatically.
                   </p>
 
                   <dl className="mt-6 grid grid-cols-1 gap-4 rounded-[18px] border border-[var(--border)] bg-[var(--bg)] p-5 sm:grid-cols-3 text-[0.875rem]">
@@ -370,11 +242,35 @@ export function ContactSection({ preselectedService }: ContactSectionProps) {
 
                   <div className="mt-7 flex flex-wrap items-center gap-3">
                     <RollButton
-                      label="Send another enquiry"
-                      variant="surface"
+                      label="Open in email app"
+                      href={submittedMailtoUrl}
+                      variant="primary"
                       size="md"
-                      onClick={handleReset}
                     />
+                    <button
+                      type="button"
+                      onClick={() => handleCopyDraft(submittedEnquiry)}
+                      className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg)] px-5 text-[0.875rem] font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] cursor-pointer whitespace-nowrap"
+                    >
+                      {copiedDraft ? (
+                        <>
+                          <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                          <span>Message copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-4 w-4" aria-hidden="true" />
+                          <span>Copy message</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleReset}
+                      className="inline-flex h-11 items-center px-3 text-[0.875rem] font-semibold text-[var(--muted)] transition-colors hover:text-[var(--ink)] cursor-pointer whitespace-nowrap"
+                    >
+                      Start over
+                    </button>
                   </div>
                 </div>
               ) : (

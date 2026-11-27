@@ -56,6 +56,7 @@ export interface ProcessStep {
 }
 
 export const STUDIO_EMAIL = 'steve@webvi.be';
+export const STUDIO_BOOKING_URL = 'https://cal.com/webvibe/book';
 
 export const NAV_LINKS: NavItem[] = [
   { label: 'Services', href: '#services' },

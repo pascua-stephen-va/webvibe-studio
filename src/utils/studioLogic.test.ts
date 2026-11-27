@@ -125,4 +125,34 @@ test('formatLocalStudioTime honors precise cityOverride and parseReverseGeocodeC
   assert.equal(parseReverseGeocodeCity({}), null);
 });
 
+test('buildEnquiryMailtoUrl encodes subject and body with all enquiry fields', async () => {
+  const { buildEnquiryMailtoUrl, buildEnquiryPlainText } = await import('./studioLogic');
+  const form = {
+    name: 'Alex Morgan',
+    email: 'alex@brand.co',
+    location: '',
+    service: 'Website Design & Build',
+    budget: '$5k – $10k',
+    message: 'Need a fast storefront & brand refresh? Launching Q2.',
+  };
+
+  const plainText = buildEnquiryPlainText(form);
+  assert.ok(plainText.includes('Name: Alex Morgan'));
+  assert.ok(plainText.includes('Email: alex@brand.co'));
+  assert.ok(plainText.includes('Service: Website Design & Build'));
+  assert.ok(plainText.includes('Estimated Budget: $5k – $10k'));
+  assert.ok(plainText.includes('City / Time Zone: Remote / Worldwide'));
+  assert.ok(plainText.includes('Need a fast storefront & brand refresh? Launching Q2.'));
+
+  const url = buildEnquiryMailtoUrl('steve@webvi.be', form);
+  assert.ok(url.startsWith('mailto:steve@webvi.be?subject='));
+  assert.ok(url.includes('&body='));
+
+  const query = url.split('?')[1] ?? '';
+  const params = new URLSearchParams(query);
+  assert.equal(params.get('subject'), 'Project Enquiry: Website Design & Build — Alex Morgan');
+  assert.equal(params.get('body'), plainText);
+});
+
+
 
